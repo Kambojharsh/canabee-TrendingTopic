@@ -1,0 +1,19 @@
+CREATE TABLE product_listings (
+    listing_id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    price DECIMAL(10,2) DEFAULT NULL,
+    discounted_price DECIMAL(10,2) DEFAULT NULL,
+    inventory_count INT(11) DEFAULT NULL,
+    listing_url TEXT DEFAULT NULL,
+    image_urls TEXT DEFAULT NULL,
+    thc_percentage DECIMAL(5,2) DEFAULT NULL,
+    cbd_percentage DECIMAL(5,2) DEFAULT NULL,
+    description TEXT DEFAULT NULL,
+    listing_date DATE DEFAULT NULL,
+    retailer_id BIGINT(20) UNSIGNED DEFAULT NULL,
+    product_id BIGINT(20) UNSIGNED DEFAULT NULL,
+    created_by VARCHAR(45) DEFAULT NULL,
+    updated_by VARCHAR(45) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    is_active TINYINT(1) DEFAULT 1
+); 

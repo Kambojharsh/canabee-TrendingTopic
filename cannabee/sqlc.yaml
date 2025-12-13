@@ -1,0 +1,14 @@
+version: "2"
+sql:
+  - engine: "mysql"
+    queries: "pkg/db/queries/"
+    schema: "pkg/db/schema/"
+    gen:
+      go:
+        package: "db"
+        out: "pkg/db"
+        sql_package: "database/sql"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: false
+        emit_exact_table_names: false

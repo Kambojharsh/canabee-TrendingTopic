@@ -1,0 +1,21 @@
+CREATE TABLE users (
+    user_id VARCHAR(45) NOT NULL PRIMARY KEY,
+    age_group INT(11) DEFAULT NULL,
+    gender INT(11) DEFAULT NULL,
+    name VARCHAR(30) DEFAULT NULL,
+    email VARCHAR(48) DEFAULT NULL,
+    experience_level INT(11) DEFAULT NULL,
+    user_type INT(11) NOT NULL DEFAULT 0,
+    device_id TEXT DEFAULT NULL,
+    firebase_token TEXT DEFAULT NULL,
+    device_type INT(11) DEFAULT NULL,
+    password VARCHAR(100) DEFAULT NULL,
+    role_id BIGINT(20) UNSIGNED DEFAULT NULL,
+    phone_number VARCHAR(20) DEFAULT NULL,
+    tags JSON DEFAULT NULL,
+    config JSON DEFAULT NULL,
+    UNIQUE KEY user_id_UNIQUE (user_id),
+    UNIQUE KEY email_UNIQUE (email),
+    KEY fk_role_id (role_id),
+    CONSTRAINT fk_role_id FOREIGN KEY (role_id) REFERENCES role (role_id)
+); 
