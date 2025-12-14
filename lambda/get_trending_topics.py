@@ -152,17 +152,3 @@ def get_trending_topics(event, context):
         print("Database connection closed")
 
 
-# For local testing
-if __name__ == "__main__":
-    # Test event (simulates GET request with query string parameters)
-    test_event = {
-        'queryStringParameters': {
-            'latitude': '12.9716',
-            'longitude': '77.5946',
-            'radius': '10'
-        }
-    }
-    
-    result = get_trending_topics(test_event, None)
-    print(json.dumps(json.loads(result['body']), indent=2))
-
