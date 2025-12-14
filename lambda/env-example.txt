@@ -1,0 +1,8 @@
+# Database Configuration
+# Copy this file to .env and fill in your actual credentials
+
+DB_HOST=your-database-host
+DB_USER=your-username
+DB_PASSWORD=your-password
+DB_NAME=your-database-name
+DB_PORT=3306
