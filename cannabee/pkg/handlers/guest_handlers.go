@@ -216,10 +216,7 @@ func (s *Server) CreateGuestSessionHandler(w http.ResponseWriter, r *http.Reques
 		LastAccessedAt:   now,
 		IsActive:         true,
 		Metadata:         sql.NullString{String: metadataJSON, Valid: metadataValid},
-		Summary:          sql.NullString{Valid: false},  // No summary at creation
-		Tag:              sql.NullString{Valid: false},  // Tag will be set when session ends
-		Latitude:         sql.NullFloat64{Valid: false}, // Location will be set when session ends
-		Longitude:        sql.NullFloat64{Valid: false}, // Location will be set when session ends
+		Summary:          sql.NullString{Valid: false},
 	})
 	if err != nil {
 		log.Printf("Error creating guest session: %v", err)

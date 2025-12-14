@@ -12,21 +12,18 @@ import (
 )
 
 const createGuestSession = `-- name: CreateGuestSession :exec
-INSERT INTO guest_sessions (session_id, guest_id, session_start_time, last_accessed_at, is_active, metadata, summary, tag, latitude, longitude)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO guest_sessions (session_id, guest_id, session_start_time, last_accessed_at, is_active, metadata, summary)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type CreateGuestSessionParams struct {
-	SessionID        string          `json:"session_id"`
-	GuestID          string          `json:"guest_id"`
-	SessionStartTime time.Time       `json:"session_start_time"`
-	LastAccessedAt   time.Time       `json:"last_accessed_at"`
-	IsActive         bool            `json:"is_active"`
-	Metadata         sql.NullString  `json:"metadata"`
-	Summary          sql.NullString  `json:"summary"`
-	Tag              sql.NullString  `json:"tag"`
-	Latitude         sql.NullFloat64 `json:"latitude"`
-	Longitude        sql.NullFloat64 `json:"longitude"`
+	SessionID        string         `json:"session_id"`
+	GuestID          string         `json:"guest_id"`
+	SessionStartTime time.Time      `json:"session_start_time"`
+	LastAccessedAt   time.Time      `json:"last_accessed_at"`
+	IsActive         bool           `json:"is_active"`
+	Metadata         sql.NullString `json:"metadata"`
+	Summary          sql.NullString `json:"summary"`
 }
 
 func (q *Queries) CreateGuestSession(ctx context.Context, arg CreateGuestSessionParams) error {
@@ -38,9 +35,6 @@ func (q *Queries) CreateGuestSession(ctx context.Context, arg CreateGuestSession
 		arg.IsActive,
 		arg.Metadata,
 		arg.Summary,
-		arg.Tag,
-		arg.Latitude,
-		arg.Longitude,
 	)
 	return err
 }
@@ -56,7 +50,7 @@ func (q *Queries) DeleteGuestSession(ctx context.Context, sessionID string) erro
 }
 
 const getGuestSessionByID = `-- name: GetGuestSessionByID :one
-SELECT session_id, guest_id, session_start_time, last_accessed_at, is_active, metadata, summary, tag, latitude, longitude
+SELECT session_id, guest_id, session_start_time, last_accessed_at, is_active, metadata, summary
 FROM guest_sessions
 WHERE session_id = ?
 `
@@ -72,15 +66,12 @@ func (q *Queries) GetGuestSessionByID(ctx context.Context, sessionID string) (Gu
 		&i.IsActive,
 		&i.Metadata,
 		&i.Summary,
-		&i.Tag,
-		&i.Latitude,
-		&i.Longitude,
 	)
 	return i, err
 }
 
 const getGuestSessionsByGuestID = `-- name: GetGuestSessionsByGuestID :many
-SELECT session_id, guest_id, session_start_time, last_accessed_at, is_active, metadata, summary, tag, latitude, longitude
+SELECT session_id, guest_id, session_start_time, last_accessed_at, is_active, metadata, summary
 FROM guest_sessions
 WHERE guest_id = ?
 ORDER BY last_accessed_at DESC
@@ -103,9 +94,6 @@ func (q *Queries) GetGuestSessionsByGuestID(ctx context.Context, guestID string)
 			&i.IsActive,
 			&i.Metadata,
 			&i.Summary,
-			&i.Tag,
-			&i.Latitude,
-			&i.Longitude,
 		); err != nil {
 			return nil, err
 		}
@@ -157,7 +145,7 @@ func (q *Queries) GetGuestSessionsToCleanupTags(ctx context.Context, arg GetGues
 }
 
 const getLastNGuestSessionsForGuest = `-- name: GetLastNGuestSessionsForGuest :many
-SELECT session_id, guest_id, session_start_time, last_accessed_at, is_active, metadata, summary, tag, latitude, longitude
+SELECT session_id, guest_id, session_start_time, last_accessed_at, is_active, metadata, summary
 FROM guest_sessions
 WHERE guest_id = ? AND is_active = false
 ORDER BY last_accessed_at DESC
@@ -186,9 +174,6 @@ func (q *Queries) GetLastNGuestSessionsForGuest(ctx context.Context, arg GetLast
 			&i.IsActive,
 			&i.Metadata,
 			&i.Summary,
-			&i.Tag,
-			&i.Latitude,
-			&i.Longitude,
 		); err != nil {
 			return nil, err
 		}
@@ -264,28 +249,5 @@ type UpdateGuestSessionSummaryParams struct {
 
 func (q *Queries) UpdateGuestSessionSummary(ctx context.Context, arg UpdateGuestSessionSummaryParams) error {
 	_, err := q.db.ExecContext(ctx, updateGuestSessionSummary, arg.Summary, arg.SessionID)
-	return err
-}
-
-const updateGuestSessionTagAndLocation = `-- name: UpdateGuestSessionTagAndLocation :exec
-UPDATE guest_sessions
-SET tag = ?, latitude = ?, longitude = ?, last_accessed_at = CURRENT_TIMESTAMP
-WHERE session_id = ?
-`
-
-type UpdateGuestSessionTagAndLocationParams struct {
-	Tag       sql.NullString  `json:"tag"`
-	Latitude  sql.NullFloat64 `json:"latitude"`
-	Longitude sql.NullFloat64 `json:"longitude"`
-	SessionID string          `json:"session_id"`
-}
-
-func (q *Queries) UpdateGuestSessionTagAndLocation(ctx context.Context, arg UpdateGuestSessionTagAndLocationParams) error {
-	_, err := q.db.ExecContext(ctx, updateGuestSessionTagAndLocation,
-		arg.Tag,
-		arg.Latitude,
-		arg.Longitude,
-		arg.SessionID,
-	)
 	return err
 }

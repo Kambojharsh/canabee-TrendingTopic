@@ -26,9 +26,6 @@ type GuestSession struct {
 	IsActive         bool           `json:"is_active"`
 	Metadata         sql.NullString `json:"metadata"`
 	Summary          sql.NullString `json:"summary"`
-	Tag              sql.NullString `json:"tag"`
-	Latitude         sql.NullFloat64 `json:"latitude"`
-	Longitude        sql.NullFloat64 `json:"longitude"`
 }
 
 type GuestUser struct {
