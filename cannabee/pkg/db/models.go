@@ -18,6 +18,29 @@ type Chat struct {
 	Message       sql.NullString `json:"message"`
 }
 
+type GuestSession struct {
+	SessionID        string         `json:"session_id"`
+	GuestID          string         `json:"guest_id"`
+	SessionStartTime time.Time      `json:"session_start_time"`
+	LastAccessedAt   time.Time      `json:"last_accessed_at"`
+	IsActive         bool           `json:"is_active"`
+	Metadata         sql.NullString `json:"metadata"`
+	Summary          sql.NullString `json:"summary"`
+	Tag              sql.NullString `json:"tag"`
+	Latitude         sql.NullFloat64 `json:"latitude"`
+	Longitude        sql.NullFloat64 `json:"longitude"`
+}
+
+type GuestUser struct {
+	GuestID           string         `json:"guest_id"`
+	CognitoIdentityID sql.NullString `json:"cognito_identity_id"`
+	AwsAccount        sql.NullString `json:"aws_account"`
+	AwsUserID         sql.NullString `json:"aws_user_id"`
+	CreatedAt         time.Time      `json:"created_at"`
+	LastAccessedAt    time.Time      `json:"last_accessed_at"`
+	Metadata          sql.NullString `json:"metadata"`
+}
+
 type Product struct {
 	ProductID      uint64         `json:"product_id"`
 	PistilVerified sql.NullBool   `json:"pistil_verified"`
@@ -111,6 +134,9 @@ type Session struct {
 	IsActive         bool           `json:"is_active"`
 	Metadata         sql.NullString `json:"metadata"`
 	Summary          sql.NullString `json:"summary"`
+	Tag              sql.NullString `json:"tag"`
+	Latitude         sql.NullFloat64 `json:"latitude"`
+	Longitude        sql.NullFloat64 `json:"longitude"`
 }
 
 type SessionSummary struct {
@@ -143,25 +169,4 @@ type User struct {
 	PhoneNumber     sql.NullString  `json:"phone_number"`
 	Tags            json.RawMessage `json:"tags"`
 	Config          json.RawMessage `json:"config"`
-}
-
-
-type GuestUser struct {
-	GuestID           string         `json:"guest_id"`
-	CognitoIdentityID sql.NullString `json:"cognito_identity_id"`
-	AwsAccount        sql.NullString `json:"aws_account"`
-	AwsUserID         sql.NullString `json:"aws_user_id"`
-	CreatedAt         time.Time      `json:"created_at"`
-	LastAccessedAt    time.Time      `json:"last_accessed_at"`
-	Metadata          sql.NullString `json:"metadata"`
-}
-
-type GuestSession struct {
-	SessionID        string         `json:"session_id"`
-	GuestID          string         `json:"guest_id"`
-	SessionStartTime time.Time      `json:"session_start_time"`
-	LastAccessedAt   time.Time      `json:"last_accessed_at"`
-	IsActive         bool           `json:"is_active"`
-	Metadata         sql.NullString `json:"metadata"`
-	Summary          sql.NullString `json:"summary"`
 }

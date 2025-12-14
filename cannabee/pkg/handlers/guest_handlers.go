@@ -45,7 +45,7 @@ type CreateGuestSessionResponse struct {
 // GetGuestSessionsHandler retrieves all sessions for a guest user
 // NOTE: Guest sessions are deleted when closed, so this will only return active sessions
 func (s *Server) GetGuestSessionsHandler(w http.ResponseWriter, r *http.Request) {
-        log.Printf("GetGuestSessionsHandler")
+	log.Printf("GetGuestSessionsHandler")
 	guestID := r.URL.Query().Get("guest_id")
 	if guestID == "" {
 		http.Error(w, "guest_id parameter required", http.StatusBadRequest)
@@ -216,7 +216,10 @@ func (s *Server) CreateGuestSessionHandler(w http.ResponseWriter, r *http.Reques
 		LastAccessedAt:   now,
 		IsActive:         true,
 		Metadata:         sql.NullString{String: metadataJSON, Valid: metadataValid},
-		Summary:          sql.NullString{Valid: false},
+		Summary:          sql.NullString{Valid: false},  // No summary at creation
+		Tag:              sql.NullString{Valid: false},  // Tag will be set when session ends
+		Latitude:         sql.NullFloat64{Valid: false}, // Location will be set when session ends
+		Longitude:        sql.NullFloat64{Valid: false}, // Location will be set when session ends
 	})
 	if err != nil {
 		log.Printf("Error creating guest session: %v", err)

@@ -226,7 +226,7 @@ func (s *Server) CreateSessionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.SessionConfig != nil {
 		sessionMetadata.SessionConfig = req.SessionConfig
-		}
+	}
 
 	// Add location data if provided
 	if req.Latitude != nil && req.Longitude != nil {
@@ -264,6 +264,10 @@ func (s *Server) CreateSessionHandler(w http.ResponseWriter, r *http.Request) {
 		LastAccessedAt:   now,            // Now directly time.Time, not sql.NullTime
 		IsActive:         true,           // Now directly bool, not sql.NullBool
 		Metadata:         sql.NullString{String: metadataJSON, Valid: metadataValid},
+		Summary:          sql.NullString{Valid: false},  // No summary at creation
+		Tag:              sql.NullString{Valid: false},  // Tag will be set when session ends
+		Latitude:         sql.NullFloat64{Valid: false}, // Location will be set when session ends
+		Longitude:        sql.NullFloat64{Valid: false}, // Location will be set when session ends
 	})
 	if err != nil {
 		log.Printf("Error creating session: %v", err)
