@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/qdrant/go-client/qdrant"
+	"google.golang.org/grpc"
 )
 
 type Client struct {
@@ -35,12 +36,18 @@ type Config struct {
 	Collection string
 }
 
+// MaxGrpcMessageSize is the maximum gRPC message size for Qdrant responses (16 MB)
+const MaxGrpcMessageSize = 16 * 1024 * 1024
+
 func NewClient(cfg Config) (*Client, error) {
 	client, err := qdrant.NewClient(&qdrant.Config{
 		Host:   cfg.Host,
 		Port:   cfg.Port,
 		APIKey: cfg.APIKey,
 		UseTLS: cfg.UseTLS,
+		GrpcOptions: []grpc.DialOption{
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(MaxGrpcMessageSize)),
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Qdrant client: %w", err)

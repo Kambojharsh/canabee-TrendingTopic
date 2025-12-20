@@ -12,13 +12,21 @@ import (
 // Product Search Configuration
 const (
 	// QdrantSearchSize is the number of products to fetch from Qdrant vector search
-	QdrantSearchSize = 20
+	QdrantSearchSize = 60
 
-	// SpatialBatchSize is the number of product IDs to query per database batch
-	SpatialBatchSize = 10
+	// Batch sizes for progressive database queries (ratio 15:20:25)
+	BatchSize1 = 15
+	BatchSize2 = 20
+	BatchSize3 = 25
 
-	// MinProductsToShow is the minimum number of unique products needed before skipping second batch
+	// SpatialBatchSize is kept for backward compatibility (equals BatchSize1)
+	SpatialBatchSize = BatchSize1
+
+	// MinProductsToShow is the minimum number of unique products needed before querying next batch
 	MinProductsToShow = 5
+
+	// MaxProductsToShow is the maximum number of unique products to return in response
+	MaxProductsToShow = 10
 )
 
 // Fallback Search Configuration
@@ -124,4 +132,36 @@ func GetSpatialBatchSize() int {
 // GetMinProductsToShow returns the minimum products to show (for backward compatibility)
 func GetMinProductsToShow() int {
 	return MinProductsToShow
+}
+
+// GetMaxProductsToShow returns the maximum products to show in response
+func GetMaxProductsToShow() int {
+	return MaxProductsToShow
+}
+
+// GetBatchSizes returns the ordered list of batch sizes for progressive querying
+func GetBatchSizes() []int {
+	return []int{BatchSize1, BatchSize2, BatchSize3}
+}
+
+// GetBatchRanges returns the start and end indices for each batch based on batch sizes
+// Returns a slice of [start, end] pairs for slicing product IDs
+func GetBatchRanges(totalProducts int) [][]int {
+	batchSizes := GetBatchSizes()
+	var ranges [][]int
+	start := 0
+
+	for _, size := range batchSizes {
+		if start >= totalProducts {
+			break
+		}
+		end := start + size
+		if end > totalProducts {
+			end = totalProducts
+		}
+		ranges = append(ranges, []int{start, end})
+		start = end
+	}
+
+	return ranges
 }
