@@ -1,17 +1,17 @@
 -- name: GetSessionsByUserID :many
-SELECT session_id, user_id, session_start_time, last_accessed_at, is_active, metadata, summary
+SELECT session_id, user_id, session_start_time, last_accessed_at, is_active, metadata, summary, tag, latitude, longitude
 FROM sessions
 WHERE user_id = ?
 ORDER BY last_accessed_at DESC;
 
 -- name: GetSessionByID :one
-SELECT session_id, user_id, session_start_time, last_accessed_at, is_active, metadata, summary
+SELECT session_id, user_id, session_start_time, last_accessed_at, is_active, metadata, summary, tag, latitude, longitude
 FROM sessions
 WHERE session_id = ?;
 
 -- name: CreateSession :exec
-INSERT INTO sessions (session_id, user_id, session_start_time, last_accessed_at, is_active, metadata, summary)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO sessions (session_id, user_id, session_start_time, last_accessed_at, is_active, metadata, summary, tag, latitude, longitude)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdateSessionAccess :exec
 UPDATE sessions
@@ -34,7 +34,7 @@ SET is_active = ?, last_accessed_at = CURRENT_TIMESTAMP
 WHERE session_id = ?;
 
 -- name: GetLastNSessionsForUser :many
-SELECT session_id, user_id, session_start_time, last_accessed_at, is_active, metadata, summary
+SELECT session_id, user_id, session_start_time, last_accessed_at, is_active, metadata, summary, tag, latitude, longitude
 FROM sessions
 WHERE user_id = ? AND is_active = false
 ORDER BY last_accessed_at DESC
@@ -49,4 +49,9 @@ LIMIT 18446744073709551615 OFFSET ?;
 
 -- name: DeleteSession :exec
 DELETE FROM sessions
+WHERE session_id = ?;
+
+-- name: UpdateSessionTagAndLocation :exec
+UPDATE sessions
+SET tag = ?, latitude = ?, longitude = ?, last_accessed_at = CURRENT_TIMESTAMP
 WHERE session_id = ?;

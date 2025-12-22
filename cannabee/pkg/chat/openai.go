@@ -329,7 +329,12 @@ type TagsResponse struct {
 }
 
 // GenerateSessionTags analyzes the chat history and generates relevant tags
-func (oc *OpenAIClient) GenerateSessionTags(ctx context.Context, messages []ChatMessage) ([]string, error) {
+func (oc *OpenAIClient) GenerateSessionTags(ctx context.Context, messages []ChatMessage, tagsCount int) ([]string, error) {
+	// Default to 5 tags if not specified
+	if tagsCount <= 0 {
+		tagsCount = 5
+	}
+
 	// Create a conversation summary for tag generation
 	var conversation strings.Builder
 	for _, msg := range messages {
@@ -352,7 +357,14 @@ func (oc *OpenAIClient) GenerateSessionTags(ctx context.Context, messages []Chat
 		return []string{}, nil
 	}
 
-	prompt := fmt.Sprintf(`Analyze the following conversation and generate 3-8 relevant tags/keywords that describe the main topics, themes, or subjects discussed. 
+	var tagCountText string
+	if tagsCount == 1 {
+		tagCountText = "1 relevant tag/keyword"
+	} else {
+		tagCountText = fmt.Sprintf("%d relevant tags/keywords", tagsCount)
+	}
+
+	prompt := fmt.Sprintf(`Analyze the following conversation and generate %s that describe the main topics, themes, or subjects discussed.
 
 Return the response as a JSON object with a "tags" array containing only the tag strings (no explanations).
 
@@ -369,7 +381,7 @@ Focus on:
 - Usage methods or consumption
 - User concerns or interests
 
-Normalize tags to lowercase and use common terminology.`, conversation.String())
+Normalize tags to lowercase and use common terminology.`, tagCountText, conversation.String())
 
 	req := openai.ChatCompletionRequest{
 		Model: openai.GPT3Dot5Turbo,
@@ -411,12 +423,16 @@ Normalize tags to lowercase and use common terminology.`, conversation.String())
 		return oc.extractTagsFromText(content), nil
 	}
 
-	// Normalize tags
+	// Normalize tags and limit to requested count
 	normalizedTags := make([]string, 0, len(tagsResp.Tags))
 	for _, tag := range tagsResp.Tags {
 		normalized := strings.ToLower(strings.TrimSpace(tag))
 		if normalized != "" && len(normalized) <= 100 { // Ensure it fits our DB constraint
 			normalizedTags = append(normalizedTags, normalized)
+			// Limit to requested count
+			if len(normalizedTags) >= tagsCount {
+				break
+			}
 		}
 	}
 
