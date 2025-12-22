@@ -80,61 +80,61 @@ func (h *Hub) HandleWebSocketWithGuestFlag(w http.ResponseWriter, r *http.Reques
 			log.Printf("Using default greeting for guest user %s (no context/history)", userID)
 			greeting = chat.GetInitialGreeting() // Always use default for guests
 		} else {
-		// Get user's conversation history context for personalized greeting
-		historyContext, err := h.contextService.GetUserSessionContext(context.Background(), userID)
-		if err != nil {
-			log.Printf("Error getting user history context for %s: %v", userID, err)
-			historyContext = &chat.UserSessionContext{SessionCount: 0}
-		}
-
-		log.Printf("User %s has %d previous sessions with %d summaries and %d topics",
-			userID, historyContext.SessionCount, len(historyContext.RecentSummaries), len(historyContext.RecentTags))
-
-		// Generate personalized greeting based on user's conversation history
-		if historyContext.SessionCount > 0 {
-			log.Printf("Generating AI-personalized greeting with history for returning user %s", userID)
-		} else {
-			log.Printf("Using default greeting for new user %s (no history)", userID)
-		}
-
-		// Get session type for personalized greeting
-		sessionType := client.getSessionType()
-		log.Printf("Session type for greeting: %s", sessionType)
-
-		// For "guide_me" sessions, do not use journey history for greeting
-		if sessionType == "guide_me" {
-			log.Printf("Using LLM-generated session-type-specific greeting for Guide Me session (no journey history)")
-			generatedGreeting, err := h.contextService.GenerateSessionTypeGreeting(context.Background(), sessionType)
+			// Get user's conversation history context for personalized greeting
+			historyContext, err := h.contextService.GetUserSessionContext(context.Background(), userID)
 			if err != nil {
-				log.Printf("Error generating session-type greeting for %s: %v, using default", userID, err)
-				greeting = chat.GetInitialGreeting()
-			} else {
-				greeting = generatedGreeting
+				log.Printf("Error getting user history context for %s: %v", userID, err)
+				historyContext = &chat.UserSessionContext{SessionCount: 0}
 			}
-		} else {
-			// Get user config for my_journey sessions
-			var userConfig map[string]interface{}
-			if sessionType == "my_journey" {
-				config, err := client.getUserConfig()
+
+			log.Printf("User %s has %d previous sessions with %d summaries and %d topics",
+				userID, historyContext.SessionCount, len(historyContext.RecentSummaries), len(historyContext.RecentTags))
+
+			// Generate personalized greeting based on user's conversation history
+			if historyContext.SessionCount > 0 {
+				log.Printf("Generating AI-personalized greeting with history for returning user %s", userID)
+			} else {
+				log.Printf("Using default greeting for new user %s (no history)", userID)
+			}
+
+			// Get session type for personalized greeting
+			sessionType := client.getSessionType()
+			log.Printf("Session type for greeting: %s", sessionType)
+
+			// For "guide_me" sessions, do not use journey history for greeting
+			if sessionType == "guide_me" {
+				log.Printf("Using LLM-generated session-type-specific greeting for Guide Me session (no journey history)")
+				generatedGreeting, err := h.contextService.GenerateSessionTypeGreeting(context.Background(), sessionType)
 				if err != nil {
-					log.Printf("Warning: Failed to get user config for greeting: %v", err)
+					log.Printf("Error generating session-type greeting for %s: %v, using default", userID, err)
+					greeting = chat.GetInitialGreeting()
 				} else {
-					userConfig = config
-					if userConfig != nil {
-						log.Printf("Using user config for my_journey greeting: %d preferences", len(userConfig))
+					greeting = generatedGreeting
+				}
+			} else {
+				// Get user config for my_journey sessions
+				var userConfig map[string]interface{}
+				if sessionType == "my_journey" {
+					config, err := client.getUserConfig()
+					if err != nil {
+						log.Printf("Warning: Failed to get user config for greeting: %v", err)
+					} else {
+						userConfig = config
+						if userConfig != nil {
+							log.Printf("Using user config for my_journey greeting: %d preferences", len(userConfig))
+						}
 					}
 				}
-			}
 
-			generatedGreeting, err := h.contextService.GeneratePersonalizedGreeting(context.Background(), historyContext, sessionType, userConfig)
-			if err != nil {
-				log.Printf("Error generating personalized greeting for %s: %v, using default", userID, err)
-				greeting = chat.GetInitialGreeting() // Fallback to default
-			} else {
-				greeting = generatedGreeting
-				log.Printf("Successfully generated greeting for user %s: %.100s...", userID, greeting)
+				generatedGreeting, err := h.contextService.GeneratePersonalizedGreeting(context.Background(), historyContext, sessionType, userConfig)
+				if err != nil {
+					log.Printf("Error generating personalized greeting for %s: %v, using default", userID, err)
+					greeting = chat.GetInitialGreeting() // Fallback to default
+				} else {
+					greeting = generatedGreeting
+					log.Printf("Successfully generated greeting for user %s: %.100s...", userID, greeting)
+				}
 			}
-		}
 		}
 
 		greetingMsg := Message{
@@ -163,11 +163,11 @@ func (h *Hub) HandleWebSocketWithGuestFlag(w http.ResponseWriter, r *http.Reques
 
 		// Lazily cleanup old session tags for this user (skip for guests)
 		if !isGuest {
-		go func() {
-			if err := h.contextService.CleanupOldUserTags(context.Background(), userID); err != nil {
-				log.Printf("Error cleaning up old tags for user %s: %v", userID, err)
-			}
-		}()
+			go func() {
+				if err := h.contextService.CleanupOldUserTags(context.Background(), userID); err != nil {
+					log.Printf("Error cleaning up old tags for user %s: %v", userID, err)
+				}
+			}()
 		}
 	} else {
 		if skipGreeting {
@@ -242,10 +242,10 @@ func (h *Hub) HandleWebSocketWithGuestFlag(w http.ResponseWriter, r *http.Reques
 					historyContext = &chat.UserSessionContext{SessionCount: 0}
 				} else {
 					historyContext, err = h.contextService.GetUserSessionContext(context.Background(), userID)
-				if err != nil {
-					log.Printf("Error getting user history context for initial message response: %v", err)
-					historyContext = &chat.UserSessionContext{SessionCount: 0}
-				}
+					if err != nil {
+						log.Printf("Error getting user history context for initial message response: %v", err)
+						historyContext = &chat.UserSessionContext{SessionCount: 0}
+					}
 				}
 
 				log.Printf("Processing initial message with AI response for session %s", sessionID)
@@ -266,7 +266,7 @@ func (c *Client) readPump() {
 
 		// Only complete session for authenticated users, not guests
 		if !c.isGuest {
-		go c.completeSession()
+			go c.completeSession()
 		} else {
 			// For guests, delete the session entirely
 			log.Printf("Guest session %s closing - will be deleted", c.sessionID)
@@ -337,13 +337,13 @@ func (c *Client) readPump() {
 			historyContext = &chat.UserSessionContext{SessionCount: 0}
 		} else {
 			historyContext, err = c.hub.contextService.GetUserSessionContext(context.Background(), c.userID)
-		if err != nil {
-			log.Printf("Error getting user history context for AI response: %v", err)
-			historyContext = &chat.UserSessionContext{SessionCount: 0}
-		}
+			if err != nil {
+				log.Printf("Error getting user history context for AI response: %v", err)
+				historyContext = &chat.UserSessionContext{SessionCount: 0}
+			}
 
-		log.Printf("Enhancing AI response with conversation history - User %s: %d sessions, %d recent topics",
-			c.userID, historyContext.SessionCount, len(historyContext.RecentTags))
+			log.Printf("Enhancing AI response with conversation history - User %s: %d sessions, %d recent topics",
+				c.userID, historyContext.SessionCount, len(historyContext.RecentTags))
 		}
 
 		// Get AI response and stream it with full conversation history context for personalized experience
@@ -1173,10 +1173,16 @@ func (c *Client) completeSession() {
 		}
 	}
 
-	// Generate session tags
-	tags, err := c.hub.openai.GenerateSessionTags(ctx, meaningfulMessages)
+	// Generate session tag (1 tag for the session)
+	sessionTags, err := c.hub.openai.GenerateSessionTags(ctx, meaningfulMessages, 1)
 	if err != nil {
-		log.Printf("Error generating session tags for %s: %v", c.sessionID, err)
+		log.Printf("Error generating session tag for %s: %v", c.sessionID, err)
+	}
+
+	// Generate user-level tags (5 tags for the user profile)
+	userTags, err := c.hub.openai.GenerateSessionTags(ctx, meaningfulMessages, 5)
+	if err != nil {
+		log.Printf("Error generating user-level tags for %s: %v", c.sessionID, err)
 	} else {
 		// Get current user's tags and merge with new session tags
 		currentUserTags, err := queries.GetUserTags(context.Background(), c.userID)
@@ -1199,7 +1205,7 @@ func (c *Client) completeSession() {
 		for _, tag := range existingTags {
 			tagSet[tag] = true
 		}
-		for _, tag := range tags {
+		for _, tag := range userTags {
 			tagSet[tag] = true
 		}
 
@@ -1221,8 +1227,50 @@ func (c *Client) completeSession() {
 			if err != nil {
 				log.Printf("Error updating user tags for %s: %v", c.userID, err)
 			} else {
-				log.Printf("Generated and merged %d new tags for user %s, total tags: %d", len(tags), c.userID, len(mergedTags))
+				log.Printf("Generated and merged %d new tags for user %s, total tags: %d", len(userTags), c.userID, len(mergedTags))
 			}
+		}
+	}
+
+	// Extract location from session metadata and save session tag + location
+	var sessionTag sql.NullString
+	var latitude, longitude sql.NullFloat64
+
+	if len(sessionTags) > 0 {
+		sessionTag = sql.NullString{String: sessionTags[0], Valid: true}
+	}
+
+	// Get session to extract location from metadata
+	session, err := queries.GetSessionByID(context.Background(), c.sessionID)
+	if err != nil {
+		log.Printf("Error getting session for location extraction: %v", err)
+	} else if session.Metadata.Valid {
+		// Parse session metadata to extract location
+		var metadata SessionMetadata
+		if err := json.Unmarshal([]byte(session.Metadata.String), &metadata); err == nil {
+			if metadata.UserLocation != nil {
+				latitude = sql.NullFloat64{Float64: metadata.UserLocation.Latitude, Valid: true}
+				longitude = sql.NullFloat64{Float64: metadata.UserLocation.Longitude, Valid: true}
+				log.Printf("Extracted location from session %s: lat=%.6f, lon=%.6f", c.sessionID, metadata.UserLocation.Latitude, metadata.UserLocation.Longitude)
+			}
+		}
+	}
+
+	// Update session with tag and location
+	err = queries.UpdateSessionTagAndLocation(context.Background(), db.UpdateSessionTagAndLocationParams{
+		SessionID: c.sessionID,
+		Tag:       sessionTag,
+		Latitude:  latitude,
+		Longitude: longitude,
+	})
+	if err != nil {
+		log.Printf("Error updating session tag and location for %s: %v", c.sessionID, err)
+	} else {
+		if sessionTag.Valid {
+			log.Printf("Saved session tag '%s' for session %s", sessionTag.String, c.sessionID)
+		}
+		if latitude.Valid && longitude.Valid {
+			log.Printf("Saved location (%.8f, %.8f) for session %s", latitude.Float64, longitude.Float64, c.sessionID)
 		}
 	}
 
@@ -1366,11 +1414,11 @@ func (c *Client) getUserLocationFromSession(ctx context.Context, isGuest bool) *
 		}
 	} else {
 		log.Printf("Fetching location from sessions table for session %s", c.sessionID)
-	session, err := queries.GetSessionByID(ctx, c.sessionID)
-	if err != nil {
-		log.Printf("Could not get session %s: %v", c.sessionID, err)
-		return nil
-	}
+		session, err := queries.GetSessionByID(ctx, c.sessionID)
+		if err != nil {
+			log.Printf("Could not get session %s: %v", c.sessionID, err)
+			return nil
+		}
 		metadataValid = session.Metadata.Valid
 		if metadataValid {
 			metadataString = session.Metadata.String

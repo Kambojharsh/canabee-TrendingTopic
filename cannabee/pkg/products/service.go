@@ -49,10 +49,10 @@ type ProductInfo struct {
 	InventoryCount  int32    `json:"inventory_count,omitempty"`
 	DiscountedPrice *float64 `json:"discounted_price,omitempty"`
 	// NEW: Location-related fields
-	RetailerName string   `json:"retailer_name,omitempty"`
-	DistanceMile *float64 `json:"distance_mile,omitempty"`
-	RetailerLat  *float64 `json:"retailer_latitude,omitempty"`
-	RetailerLng  *float64 `json:"retailer_longitude,omitempty"`
+	RetailerName    string   `json:"retailer_name,omitempty"`
+	DistanceMile    *float64 `json:"distance_mile,omitempty"`
+	RetailerLat     *float64 `json:"retailer_latitude,omitempty"`
+	RetailerLng     *float64 `json:"retailer_longitude,omitempty"`
 	RetailerHomeURL string   `json:"retailer_home_url,omitempty"`
 	RetailerMenuURL string   `json:"retailer_menu_url,omitempty"`
 }
@@ -162,7 +162,7 @@ func (prs *ProductRecommendationService) GetRecommendationsWithLocation(ctx cont
 		if isGuest {
 			response.Reason = fmt.Sprintf("To show you the best %s available near you, I need to know your location first. Please use the location button or settings to share your location and set your search radius.", decision.RecommendationQuery)
 		} else {
-		response.Reason = fmt.Sprintf("To find the best %s for you, I need to know your location first. Please set your location and search radius in your session settings so I can show you products available in your area.", decision.RecommendationQuery)
+			response.Reason = fmt.Sprintf("To find the best %s for you, I need to know your location first. Please set your location and search radius in your session settings so I can show you products available in your area.", decision.RecommendationQuery)
 		}
 		return response, nil
 	}
@@ -285,93 +285,15 @@ func (prs *ProductRecommendationService) GetRecommendationsWithLocation(ctx cont
 		effectiveRadius = 62
 	}
 
-	// Progressive querying: Query in batches to optimize performance
-	// Split product IDs into two batches
-	firstBatchSize := constants.SpatialBatchSize
-	if len(productIDs) < constants.SpatialBatchSize {
-		firstBatchSize = len(productIDs)
-	}
-
-	firstBatch := productIDs[:firstBatchSize]
-	log.Printf("=== Progressive Query: First Batch ===")
-	log.Printf("Querying first batch of %d product IDs: %v", len(firstBatch), firstBatch)
-
-	// Query first batch
-	spatialRows, err := queries.GetProductListingsWithinRadiusByProductIDs(ctx, db.GetProductListingsWithinRadiusByProductIDsParams{
-		UserLat:    userLocation.Latitude,
-		UserLng:    userLocation.Longitude,
-		ProductIds: prs.convertToNullInt64Slice(firstBatch),
-		RadiusMile: effectiveRadius,
-	})
-
+	// Progressive querying: Query in batches (15:20:25 ratio) to optimize performance
+	allListings, err := prs.queryProductsInBatches(ctx, queries, productIDs, userLocation, effectiveRadius)
 	if err != nil {
-		log.Printf("ERROR: Failed to fetch location-filtered product listings (first batch): %v", err)
+		log.Printf("ERROR: Failed to fetch location-filtered product listings: %v", err)
 		response.ShouldShowRecommendations = true
 		response.Products = []ProductInfo{}
 		response.Reason = "I'm having trouble finding products near your location. Please try again in a moment."
 		return response, nil
 	}
-
-	log.Printf("First batch returned %d product listings", len(spatialRows))
-
-	// Convert first batch to ProductInfo (without deduplication yet)
-	firstBatchListings := prs.convertRowsToProductInfo(spatialRows)
-
-	// Count unique product IDs in first batch
-	uniqueProductIDs := make(map[int64]bool)
-	for _, product := range firstBatchListings {
-		if product.ProductID != nil {
-			uniqueProductIDs[*product.ProductID] = true
-		}
-		}
-	uniqueCount := len(uniqueProductIDs)
-	log.Printf("First batch has %d unique product IDs (from %d listings)", uniqueCount, len(firstBatchListings))
-
-	// Check if we need to query the second batch (based on unique product count)
-	needsSecondBatch := uniqueCount < constants.MinProductsToShow && len(productIDs) > firstBatchSize
-
-	var allListings []ProductInfo
-	if needsSecondBatch {
-		log.Printf("=== Progressive Query: Second Batch ===")
-		log.Printf("First batch has only %d unique products (< %d), querying remaining products", uniqueCount, constants.MinProductsToShow)
-
-		secondBatch := productIDs[firstBatchSize:]
-		log.Printf("Querying second batch of %d product IDs: %v", len(secondBatch), secondBatch)
-
-		secondSpatialRows, err := queries.GetProductListingsWithinRadiusByProductIDs(ctx, db.GetProductListingsWithinRadiusByProductIDsParams{
-			UserLat:    userLocation.Latitude,
-			UserLng:    userLocation.Longitude,
-			ProductIds: prs.convertToNullInt64Slice(secondBatch),
-			RadiusMile: effectiveRadius,
-		})
-
-		if err != nil {
-			log.Printf("ERROR: Failed to fetch location-filtered product listings (second batch): %v", err)
-			// Continue with first batch results even if second batch fails
-			log.Printf("Continuing with first batch results despite second batch error")
-			allListings = firstBatchListings
-		} else {
-			log.Printf("Second batch returned %d product listings", len(secondSpatialRows))
-
-			// Convert second batch to ProductInfo
-			secondBatchListings := prs.convertRowsToProductInfo(secondSpatialRows)
-
-			// Count unique products in second batch
-			for _, product := range secondBatchListings {
-		if product.ProductID != nil {
-					uniqueProductIDs[*product.ProductID] = true
-		}
-	}
-			log.Printf("Second batch has %d listings", len(secondBatchListings))
-			log.Printf("Combined unique product IDs across both batches: %d", len(uniqueProductIDs))
-
-			// Combine all listings from both batches
-			allListings = append(firstBatchListings, secondBatchListings...)
-				}
-			} else {
-		log.Printf("First batch has %d unique products (>= %d or no more products), skipping second batch", uniqueCount, constants.MinProductsToShow)
-		allListings = firstBatchListings
-			}
 
 	log.Printf("=== Deduplicating Products ===")
 	log.Printf("Total listings before deduplication: %d", len(allListings))
@@ -385,8 +307,8 @@ func (prs *ProductRecommendationService) GetRecommendationsWithLocation(ctx cont
 	}
 	log.Printf("Product listings by product_id: %v", productIDCounts)
 
-	// Now deduplicate once at the end
-	allProducts := prs.deduplicateProducts(allListings, userLocation)
+	// Deduplicate and limit to MaxProductsToShow
+	allProducts := prs.deduplicateAndLimitProducts(allListings, userLocation, constants.MaxProductsToShow)
 
 	log.Printf("=== SQL Query Results Summary ===")
 	log.Printf("Total unique products after deduplication: %d", len(allProducts))
@@ -553,7 +475,7 @@ func (prs *ProductRecommendationService) processImageURLs(imageURLs sql.NullStri
 		imageURL = strings.TrimSpace(parts[0])
 		log.Printf("Multiple semicolon-separated URLs found, using first: %s", imageURL)
 	}
-*/
+	*/
 	return imageURL
 }
 
@@ -621,17 +543,20 @@ func (prs *ProductRecommendationService) shouldReplaceProductWithLocation(newPro
 }
 
 // convertRowsToProductInfo converts SQL rows to ProductInfo without deduplication
+// Products without a valid product_name are skipped
 func (prs *ProductRecommendationService) convertRowsToProductInfo(spatialRows []db.GetProductListingsWithinRadiusByProductIDsRow) []ProductInfo {
 	var products []ProductInfo
+	skippedCount := 0
+
 	for _, row := range spatialRows {
-		// Use product_name from products table as the primary name, fallback to extracted name from description
-		productName := ""
-		if row.ProductName.Valid {
-			productName = row.ProductName.String
+		// Skip products without a valid product_name
+		if !row.ProductName.Valid || strings.TrimSpace(row.ProductName.String) == "" {
+			skippedCount++
+			log.Printf("Skipping product listing %d: no valid product_name", row.ListingID)
+			continue
 		}
-		if productName == "" {
-			productName = prs.extractNameFromDescription(row.Description)
-		}
+
+		productName := strings.TrimSpace(row.ProductName.String)
 
 		product := ProductInfo{
 			ID:              fmt.Sprintf("%d", row.ListingID),
@@ -648,15 +573,20 @@ func (prs *ProductRecommendationService) convertRowsToProductInfo(spatialRows []
 			InventoryCount:  prs.getInt32Value(row.InventoryCount),
 			DiscountedPrice: prs.getFloatPointer(row.DiscountedPrice),
 			// Location fields
-			RetailerName: prs.getStringValue(row.RetailerName),
-			RetailerLat:  prs.getFloatPointer(row.RetailerLatitude),
-			RetailerLng:  prs.getFloatPointer(row.RetailerLongitude),
-			DistanceMile: prs.getFloatPointerFromValue(row.DistanceMile),
+			RetailerName:    prs.getStringValue(row.RetailerName),
+			RetailerLat:     prs.getFloatPointer(row.RetailerLatitude),
+			RetailerLng:     prs.getFloatPointer(row.RetailerLongitude),
+			DistanceMile:    prs.getFloatPointerFromValue(row.DistanceMile),
 			RetailerHomeURL: prs.getStringValue(row.RetailerHomeURL),
 			RetailerMenuURL: prs.getStringValue(row.RetailerMenuURL),
 		}
 		products = append(products, product)
 	}
+
+	if skippedCount > 0 {
+		log.Printf("Skipped %d products without valid product_name", skippedCount)
+	}
+
 	return products
 }
 
@@ -692,6 +622,160 @@ func (prs *ProductRecommendationService) deduplicateProducts(allListings []Produ
 
 	log.Printf("Deduplication complete: %d listings → %d unique products", len(allListings), len(finalProducts))
 	return finalProducts
+}
+
+// deduplicateAndLimitProducts deduplicates products and limits to maxProducts
+func (prs *ProductRecommendationService) deduplicateAndLimitProducts(allListings []ProductInfo, userLocation *UserLocation, maxProducts int) []ProductInfo {
+	// First deduplicate
+	deduplicated := prs.deduplicateProducts(allListings, userLocation)
+
+	// Then limit to maxProducts
+	if len(deduplicated) > maxProducts {
+		log.Printf("Limiting products from %d to %d (MaxProductsToShow)", len(deduplicated), maxProducts)
+		// Sort by distance if available, then take the closest ones
+		deduplicated = prs.selectTopProducts(deduplicated, userLocation, maxProducts)
+	}
+
+	return deduplicated
+}
+
+// selectTopProducts selects the top N products based on distance and quality criteria
+func (prs *ProductRecommendationService) selectTopProducts(products []ProductInfo, userLocation *UserLocation, maxProducts int) []ProductInfo {
+	if len(products) <= maxProducts {
+		return products
+	}
+
+	// Sort products by distance (closest first), then by price (lowest first)
+	// Using a simple selection approach - prioritize by distance
+	type scoredProduct struct {
+		product  ProductInfo
+		distance float64
+		price    float64
+	}
+
+	scored := make([]scoredProduct, len(products))
+	for i, p := range products {
+		distance := float64(999999) // Default to very far if no distance
+		if p.DistanceMile != nil {
+			distance = *p.DistanceMile
+		}
+		scored[i] = scoredProduct{
+			product:  p,
+			distance: distance,
+			price:    p.Price,
+		}
+	}
+
+	// Sort by distance first, then by price
+	for i := 0; i < len(scored)-1; i++ {
+		for j := i + 1; j < len(scored); j++ {
+			shouldSwap := false
+			if scored[i].distance > scored[j].distance {
+				shouldSwap = true
+			} else if scored[i].distance == scored[j].distance && scored[i].price > scored[j].price {
+				shouldSwap = true
+			}
+			if shouldSwap {
+				scored[i], scored[j] = scored[j], scored[i]
+			}
+		}
+	}
+
+	// Take top maxProducts
+	result := make([]ProductInfo, maxProducts)
+	for i := 0; i < maxProducts; i++ {
+		result[i] = scored[i].product
+	}
+
+	log.Printf("Selected top %d products by distance and price", maxProducts)
+	return result
+}
+
+// queryProductsInBatches queries products in progressive batches (15:20:25 ratio)
+// Returns early if MinProductsToShow unique products are found
+func (prs *ProductRecommendationService) queryProductsInBatches(
+	ctx context.Context,
+	queries *db.Queries,
+	productIDs []uint64,
+	userLocation *UserLocation,
+	effectiveRadius float64,
+) ([]ProductInfo, error) {
+	batchRanges := constants.GetBatchRanges(len(productIDs))
+	log.Printf("=== Progressive Batch Querying ===")
+	log.Printf("Total product IDs: %d, Number of batches: %d", len(productIDs), len(batchRanges))
+	log.Printf("Batch ranges: %v", batchRanges)
+
+	var allListings []ProductInfo
+	uniqueProductIDs := make(map[int64]bool)
+
+	for batchNum, batchRange := range batchRanges {
+		batchStart := batchRange[0]
+		batchEnd := batchRange[1]
+		batchProductIDs := productIDs[batchStart:batchEnd]
+
+		log.Printf("=== Progressive Query: Batch %d ===", batchNum+1)
+		log.Printf("Querying batch %d of %d product IDs (indices %d-%d): %v",
+			batchNum+1, len(batchProductIDs), batchStart, batchEnd-1, batchProductIDs)
+
+		// Query this batch
+		spatialRows, err := queries.GetProductListingsWithinRadiusByProductIDs(ctx, db.GetProductListingsWithinRadiusByProductIDsParams{
+			UserLat:    userLocation.Latitude,
+			UserLng:    userLocation.Longitude,
+			ProductIds: prs.convertToNullInt64Slice(batchProductIDs),
+			RadiusMile: effectiveRadius,
+		})
+
+		if err != nil {
+			log.Printf("ERROR: Failed to fetch batch %d: %v", batchNum+1, err)
+			// If first batch fails, return error; otherwise continue with what we have
+			if batchNum == 0 {
+				return nil, err
+			}
+			log.Printf("Continuing with previous batch results despite batch %d error", batchNum+1)
+			break
+		}
+
+		log.Printf("Batch %d returned %d product listings", batchNum+1, len(spatialRows))
+
+		// Convert batch to ProductInfo
+		batchListings := prs.convertRowsToProductInfo(spatialRows)
+		log.Printf("Batch %d has %d valid listings after filtering", batchNum+1, len(batchListings))
+
+		// Count unique products in this batch
+		for _, product := range batchListings {
+			if product.ProductID != nil {
+				uniqueProductIDs[*product.ProductID] = true
+			}
+		}
+
+		// Add batch listings to all listings
+		allListings = append(allListings, batchListings...)
+
+		uniqueCount := len(uniqueProductIDs)
+		log.Printf("After batch %d: %d unique product IDs (from %d total listings)",
+			batchNum+1, uniqueCount, len(allListings))
+
+		// Check if we have enough unique products to stop querying
+		if uniqueCount >= constants.MinProductsToShow {
+			remainingBatches := len(batchRanges) - batchNum - 1
+			if remainingBatches > 0 {
+				log.Printf("Found %d unique products (>= %d), skipping remaining %d batch(es)",
+					uniqueCount, constants.MinProductsToShow, remainingBatches)
+			}
+			break
+		}
+
+		// If more batches available and we don't have enough products, continue
+		if batchNum < len(batchRanges)-1 {
+			log.Printf("Only %d unique products (< %d), will query next batch",
+				uniqueCount, constants.MinProductsToShow)
+		}
+	}
+
+	log.Printf("=== Batch Querying Complete ===")
+	log.Printf("Total listings collected: %d, Unique product IDs: %d", len(allListings), len(uniqueProductIDs))
+
+	return allListings, nil
 }
 
 // handleFallbackSearch performs progressive fallback searches when no products found in user's radius
@@ -734,9 +818,9 @@ func (prs *ProductRecommendationService) handleFallbackSearch(
 		if len(fallbackRows) > 0 {
 			log.Printf("Fallback query at %.0f miles returned %d listings", fallbackRadius, len(fallbackRows))
 
-			// Convert and deduplicate
+			// Convert, deduplicate, and limit to MaxProductsToShow
 			fallbackListings := prs.convertRowsToProductInfo(fallbackRows)
-			fallbackProducts = prs.deduplicateProducts(fallbackListings, userLocation)
+			fallbackProducts = prs.deduplicateAndLimitProducts(fallbackListings, userLocation, constants.MaxProductsToShow)
 
 			if len(fallbackProducts) > 0 {
 				usedFallbackRadius = fallbackRadius
