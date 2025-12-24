@@ -918,25 +918,12 @@ func (oc *OpenAIClient) GenerateProductInsights(ctx context.Context, products []
 
 	log.Printf("=== Generating AI Insights for %d Products ===", len(products))
 
-	var results []ProductInsightsOutput
-
-	// Process products in batches to avoid token limits
-	batchSize := 5
-	for i := 0; i < len(products); i += batchSize {
-		end := i + batchSize
-		if end > len(products) {
-			end = len(products)
-		}
-		batch := products[i:end]
-
-		batchResults, err := oc.generateInsightsBatch(ctx, batch)
-		if err != nil {
-			log.Printf("ERROR: Failed to generate insights for batch %d-%d: %v", i, end, err)
-			// Continue with other batches, don't fail entire operation
-			continue
-		}
-
-		results = append(results, batchResults...)
+	// For up to 10 products, process in a single batch (faster than multiple API calls)
+	// GPT-4.1 can easily handle 10 products within token limits
+	results, err := oc.generateInsightsBatch(ctx, products)
+	if err != nil {
+		log.Printf("ERROR: Failed to generate insights: %v", err)
+		return []ProductInsightsOutput{}, err
 	}
 
 	log.Printf("Successfully generated insights for %d/%d products", len(results), len(products))
