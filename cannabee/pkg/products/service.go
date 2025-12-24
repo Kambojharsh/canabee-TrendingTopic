@@ -55,6 +55,21 @@ type ProductInfo struct {
 	RetailerLng     *float64 `json:"retailer_longitude,omitempty"`
 	RetailerHomeURL string   `json:"retailer_home_url,omitempty"`
 	RetailerMenuURL string   `json:"retailer_menu_url,omitempty"`
+	// NEW: AI-generated product insights
+	WhyThisProduct string   `json:"why_this_product,omitempty"`
+	TopFeelings    []string `json:"top_feelings,omitempty"`
+	KeyInfo        *KeyInfo `json:"key_info,omitempty"`
+	Ingredients    string   `json:"ingredients,omitempty"`
+}
+
+// KeyInfo represents structured key information about a product
+type KeyInfo struct {
+	Flavor            string `json:"flavor,omitempty"`
+	THCCBDContent     string `json:"thc_cbd_content,omitempty"`
+	StrainType        string `json:"strain_type,omitempty"`
+	TypicalTimeOfUse  string `json:"typical_time_of_use,omitempty"`
+	ExpectedIntensity string `json:"expected_intensity,omitempty"`
+	ConsumptionFormat string `json:"consumption_format,omitempty"`
 }
 
 // UserLocation represents user's location for filtering products
@@ -309,6 +324,10 @@ func (prs *ProductRecommendationService) GetRecommendationsWithLocation(ctx cont
 
 	// Deduplicate and limit to MaxProductsToShow
 	allProducts := prs.deduplicateAndLimitProducts(allListings, userLocation, constants.MaxProductsToShow)
+
+	// Enrich products with AI-generated insights
+	log.Printf("=== Enriching Products with AI Insights ===")
+	allProducts = prs.enrichProductsWithAIInsights(ctx, queries, allProducts)
 
 	log.Printf("=== SQL Query Results Summary ===")
 	log.Printf("Total unique products after deduplication: %d", len(allProducts))
@@ -822,7 +841,10 @@ func (prs *ProductRecommendationService) handleFallbackSearch(
 			fallbackListings := prs.convertRowsToProductInfo(fallbackRows)
 			fallbackProducts = prs.deduplicateAndLimitProducts(fallbackListings, userLocation, constants.MaxProductsToShow)
 
+			// Enrich fallback products with AI insights
 			if len(fallbackProducts) > 0 {
+				log.Printf("Enriching fallback products with AI insights")
+				fallbackProducts = prs.enrichProductsWithAIInsights(ctx, queries, fallbackProducts)
 				usedFallbackRadius = fallbackRadius
 				log.Printf("✅ Fallback successful: found %d unique products at %.0f miles", len(fallbackProducts), fallbackRadius)
 				break // Found products, stop searching
@@ -870,6 +892,179 @@ func (prs *ProductRecommendationService) buildFallbackSuccessResponse(
 
 	log.Printf("Returning %d fallback products with expanded radius message", len(products))
 	return response
+}
+
+// enrichProductsWithAIInsights enriches products with AI-generated insights
+// It first checks the database cache, then generates missing insights via OpenAI
+func (prs *ProductRecommendationService) enrichProductsWithAIInsights(ctx context.Context, queries *db.Queries, products []ProductInfo) []ProductInfo {
+	if len(products) == 0 {
+		return products
+	}
+
+	// Collect all product IDs
+	var productIDs []int64
+	productIDMap := make(map[int64]int) // productID -> index in products slice
+	for i, p := range products {
+		if p.ProductID != nil {
+			productIDs = append(productIDs, *p.ProductID)
+			productIDMap[*p.ProductID] = i
+		}
+	}
+
+	if len(productIDs) == 0 {
+		log.Printf("No product IDs found for AI insight enrichment")
+		return products
+	}
+
+	log.Printf("Looking up cached AI insights for %d products", len(productIDs))
+
+	// Step 1: Check database for existing insights
+	cachedInsights, err := queries.GetProductAIInsightsByProductIDs(ctx, productIDs)
+	if err != nil {
+		log.Printf("WARNING: Failed to fetch cached AI insights: %v", err)
+		// Continue without cached insights
+		cachedInsights = []db.ProductAIInsight{}
+	}
+
+	log.Printf("Found %d cached AI insights", len(cachedInsights))
+
+	// Build a map of cached insights by product ID
+	cachedMap := make(map[int64]db.ProductAIInsight)
+	for _, insight := range cachedInsights {
+		cachedMap[int64(insight.ProductID)] = insight
+	}
+
+	// Identify products that need AI generation
+	var productsNeedingAI []chat.ProductInsightsInput
+	for _, p := range products {
+		if p.ProductID == nil {
+			continue
+		}
+		productID := *p.ProductID
+		if _, exists := cachedMap[productID]; !exists {
+			// Build input for AI generation
+			thcContent := 0.0
+			cbdContent := 0.0
+			if p.THCContent != nil {
+				thcContent = *p.THCContent
+			}
+			if p.CBDContent != nil {
+				cbdContent = *p.CBDContent
+			}
+
+			productsNeedingAI = append(productsNeedingAI, chat.ProductInsightsInput{
+				ProductID:   productID,
+				Name:        p.Name,
+				Description: p.Description,
+				Category:    p.Category,
+				THCContent:  thcContent,
+				CBDContent:  cbdContent,
+				StrainType:  p.StrainType,
+			})
+		}
+	}
+
+	log.Printf("%d products need AI insight generation", len(productsNeedingAI))
+
+	// Step 2: Generate insights for products not in cache
+	if len(productsNeedingAI) > 0 {
+		aiInsights, err := prs.openaiClient.GenerateProductInsights(ctx, productsNeedingAI)
+		if err != nil {
+			log.Printf("WARNING: Failed to generate AI insights: %v", err)
+			// Continue with cached insights only
+		} else {
+			log.Printf("Generated AI insights for %d products", len(aiInsights))
+
+			// Save generated insights to database
+			for _, insight := range aiInsights {
+				if err := prs.saveProductInsight(ctx, queries, insight); err != nil {
+					log.Printf("WARNING: Failed to save AI insight for product %d: %v", insight.ProductID, err)
+				}
+			}
+
+			// Add to cached map for enrichment
+			for _, insight := range aiInsights {
+				// Convert to database format for consistency
+				topFeelingsJSON, _ := json.Marshal(insight.TopFeelings)
+				keyInfoJSON, _ := json.Marshal(insight.KeyInfo)
+
+				cachedMap[insight.ProductID] = db.ProductAIInsight{
+					ProductID:      uint64(insight.ProductID),
+					WhyThisProduct: sql.NullString{String: insight.WhyThisProduct, Valid: insight.WhyThisProduct != ""},
+					TopFeelings:    topFeelingsJSON,
+					KeyInfo:        keyInfoJSON,
+					Ingredients:    sql.NullString{String: insight.Ingredients, Valid: insight.Ingredients != ""},
+				}
+			}
+		}
+	}
+
+	// Step 3: Enrich products with insights from cache
+	for i, p := range products {
+		if p.ProductID == nil {
+			continue
+		}
+		productID := *p.ProductID
+
+		if insight, exists := cachedMap[productID]; exists {
+			products[i] = prs.applyInsightToProduct(p, insight)
+		}
+	}
+
+	log.Printf("Enriched %d products with AI insights", len(products))
+	return products
+}
+
+// saveProductInsight saves a product insight to the database
+func (prs *ProductRecommendationService) saveProductInsight(ctx context.Context, queries *db.Queries, insight chat.ProductInsightsOutput) error {
+	topFeelingsJSON, err := json.Marshal(insight.TopFeelings)
+	if err != nil {
+		return fmt.Errorf("failed to marshal top_feelings: %w", err)
+	}
+
+	keyInfoJSON, err := json.Marshal(insight.KeyInfo)
+	if err != nil {
+		return fmt.Errorf("failed to marshal key_info: %w", err)
+	}
+
+	return queries.UpsertProductAIInsight(ctx, db.UpsertProductAIInsightParams{
+		ProductID:      insight.ProductID,
+		WhyThisProduct: sql.NullString{String: insight.WhyThisProduct, Valid: insight.WhyThisProduct != ""},
+		TopFeelings:    topFeelingsJSON,
+		KeyInfo:        keyInfoJSON,
+		Ingredients:    sql.NullString{String: insight.Ingredients, Valid: insight.Ingredients != ""},
+	})
+}
+
+// applyInsightToProduct applies cached AI insight to a product
+func (prs *ProductRecommendationService) applyInsightToProduct(product ProductInfo, insight db.ProductAIInsight) ProductInfo {
+	// Apply "Why This Product"
+	if insight.WhyThisProduct.Valid {
+		product.WhyThisProduct = insight.WhyThisProduct.String
+	}
+
+	// Apply "Top Feelings"
+	if len(insight.TopFeelings) > 0 {
+		var feelings []string
+		if err := json.Unmarshal(insight.TopFeelings, &feelings); err == nil {
+			product.TopFeelings = feelings
+		}
+	}
+
+	// Apply "Key Info"
+	if len(insight.KeyInfo) > 0 {
+		var keyInfo KeyInfo
+		if err := json.Unmarshal(insight.KeyInfo, &keyInfo); err == nil {
+			product.KeyInfo = &keyInfo
+		}
+	}
+
+	// Apply "Ingredients"
+	if insight.Ingredients.Valid {
+		product.Ingredients = insight.Ingredients.String
+	}
+
+	return product
 }
 
 // Close closes the Qdrant client connection

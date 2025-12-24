@@ -879,6 +879,181 @@ func (oc *OpenAIClient) enhanceMessagesWithKnowledge(messages []ChatMessage, kno
 	return oc.enhanceMessagesWithKnowledgeAndSystemPrompt(messages, knowledgeContext, GetMainConversationalSystemPrompt())
 }
 
+// ProductInsightsInput contains the product data needed to generate AI insights
+type ProductInsightsInput struct {
+	ProductID   int64   `json:"product_id"`
+	Name        string  `json:"name"`
+	Description string  `json:"description"`
+	Category    string  `json:"category"`
+	THCContent  float64 `json:"thc_content"`
+	CBDContent  float64 `json:"cbd_content"`
+	StrainType  string  `json:"strain_type"`
+}
+
+// ProductInsightsOutput contains AI-generated insights for a product
+type ProductInsightsOutput struct {
+	ProductID      int64    `json:"product_id"`
+	WhyThisProduct string   `json:"why_this_product"`
+	TopFeelings    []string `json:"top_feelings"`
+	KeyInfo        KeyInfo  `json:"key_info"`
+	Ingredients    string   `json:"ingredients"`
+}
+
+// KeyInfo represents structured key information about a product
+type KeyInfo struct {
+	Flavor            string `json:"flavor,omitempty"`
+	THCCBDContent     string `json:"thc_cbd_content,omitempty"`
+	StrainType        string `json:"strain_type,omitempty"`
+	TypicalTimeOfUse  string `json:"typical_time_of_use,omitempty"`
+	ExpectedIntensity string `json:"expected_intensity,omitempty"`
+	ConsumptionFormat string `json:"consumption_format,omitempty"`
+}
+
+// GenerateProductInsights generates AI insights for multiple products
+// Uses GPT-4.1 for best quality results, accuracy, and cannabis domain knowledge
+func (oc *OpenAIClient) GenerateProductInsights(ctx context.Context, products []ProductInsightsInput) ([]ProductInsightsOutput, error) {
+	if len(products) == 0 {
+		return []ProductInsightsOutput{}, nil
+	}
+
+	log.Printf("=== Generating AI Insights for %d Products ===", len(products))
+
+	var results []ProductInsightsOutput
+
+	// Process products in batches to avoid token limits
+	batchSize := 5
+	for i := 0; i < len(products); i += batchSize {
+		end := i + batchSize
+		if end > len(products) {
+			end = len(products)
+		}
+		batch := products[i:end]
+
+		batchResults, err := oc.generateInsightsBatch(ctx, batch)
+		if err != nil {
+			log.Printf("ERROR: Failed to generate insights for batch %d-%d: %v", i, end, err)
+			// Continue with other batches, don't fail entire operation
+			continue
+		}
+
+		results = append(results, batchResults...)
+	}
+
+	log.Printf("Successfully generated insights for %d/%d products", len(results), len(products))
+	return results, nil
+}
+
+// generateInsightsBatch generates insights for a batch of products
+func (oc *OpenAIClient) generateInsightsBatch(ctx context.Context, products []ProductInsightsInput) ([]ProductInsightsOutput, error) {
+	// Build product descriptions for the prompt
+	var productDescriptions strings.Builder
+	for i, p := range products {
+		productDescriptions.WriteString(fmt.Sprintf(`
+Product %d (ID: %d):
+- Name: %s
+- Description: %s
+- Category: %s
+- THC Content: %.1f%%
+- CBD Content: %.1f%%
+- Strain Type: %s
+`, i+1, p.ProductID, p.Name, p.Description, p.Category, p.THCContent, p.CBDContent, p.StrainType))
+	}
+
+	systemPrompt := `You are a cannabis product expert assistant with deep knowledge of cannabis strains, effects, and products. Your task is to generate accurate, helpful insights about cannabis products.
+
+KNOWLEDGE USAGE GUIDELINES:
+1. USE PROVIDED DATA FIRST - Always prioritize the product information provided (name, description, THC/CBD content, strain type, category)
+2. FILL GAPS WITH YOUR EXPERTISE - If specific fields are empty or missing in the provided data, you MAY use your cannabis expertise to provide accurate information, but ONLY if you are highly confident about the value
+3. NEVER GUESS OR FABRICATE - If you are not confident about a value, return an empty string or empty array for that field. False information is worse than no information
+4. BE HONEST ABOUT CONFIDENCE - Only provide information you would stake your reputation on as a cannabis expert
+5. Use accurate cannabis terminology and effects based on known strain types (Indica, Sativa, Hybrid)
+
+EXAMPLE: If a product named "Blue Dream" has empty THC content, you may provide typical THC range for Blue Dream (17-24%) since this is well-documented. But if it's an unknown product with no data, leave it empty.
+
+For each product, generate:
+1. why_this_product: 2-3 sentences about why and when this product is useful. Base this on product name, strain type, THC/CBD content, and your cannabis knowledge.
+2. top_feelings: Array of 3-5 feelings/effects the user might experience. Use known effects for the strain type or specific strain if you recognize it.
+3. key_info: Object with structured details:
+   - flavor: From description OR your knowledge of this specific strain if you recognize it
+   - thc_cbd_content: Format as "THC: X% | CBD: Y%" - use provided values or known typical ranges for recognized strains
+   - strain_type: Indica/Sativa/Hybrid with brief effect note
+   - typical_time_of_use: Based on strain type (Indica=evening/night, Sativa=day, Hybrid=any)
+   - expected_intensity: Based on THC content (0-15%=light, 15-25%=moderate, 25%+=strong)
+   - consumption_format: From description or category
+4. ingredients: Include if mentioned in description, or provide common terpene profile if you recognize the strain. Leave empty if unknown.
+
+Respond with a JSON array of objects matching the exact product order provided.`
+
+	userPrompt := fmt.Sprintf(`Generate insights for these cannabis products. Return ONLY a valid JSON array with no additional text:
+
+%s
+
+Return format:
+[
+  {
+    "product_id": <number>,
+    "why_this_product": "<string>",
+    "top_feelings": ["<string>", ...],
+    "key_info": {
+      "flavor": "<string or empty>",
+      "thc_cbd_content": "<string>",
+      "strain_type": "<string>",
+      "typical_time_of_use": "<string>",
+      "expected_intensity": "<string>",
+      "consumption_format": "<string or empty>"
+    },
+    "ingredients": "<string or empty>"
+  }
+]`, productDescriptions.String())
+
+	req := openai.ChatCompletionRequest{
+		Model: openai.GPT4Dot1, // Using GPT-4.1 - latest stable model with best accuracy
+		Messages: []openai.ChatCompletionMessage{
+			{Role: openai.ChatMessageRoleSystem, Content: systemPrompt},
+			{Role: openai.ChatMessageRoleUser, Content: userPrompt},
+		},
+		Temperature: 0.3, // Low temperature for consistent, factual responses
+		MaxTokens:   2500,
+	}
+
+	log.Printf("Sending product insights request to OpenAI (GPT-4.1) for %d products", len(products))
+
+	resp, err := oc.client.CreateChatCompletion(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create chat completion for product insights: %w", err)
+	}
+
+	if len(resp.Choices) == 0 {
+		return nil, fmt.Errorf("no response choices returned for product insights")
+	}
+
+	responseContent := strings.TrimSpace(resp.Choices[0].Message.Content)
+	log.Printf("Received product insights response (length: %d)", len(responseContent))
+
+	// Clean up response - remove markdown code blocks if present
+	responseContent = strings.TrimPrefix(responseContent, "```json")
+	responseContent = strings.TrimPrefix(responseContent, "```")
+	responseContent = strings.TrimSuffix(responseContent, "```")
+	responseContent = strings.TrimSpace(responseContent)
+
+	// Parse the JSON response
+	var insights []ProductInsightsOutput
+	if err := json.Unmarshal([]byte(responseContent), &insights); err != nil {
+		log.Printf("ERROR: Failed to parse product insights JSON: %v", err)
+		log.Printf("Raw response: %s", responseContent[:min(500, len(responseContent))])
+		return nil, fmt.Errorf("failed to parse product insights response: %w", err)
+	}
+
+	// Validate product IDs match
+	for i, insight := range insights {
+		if i < len(products) && insight.ProductID == 0 {
+			insights[i].ProductID = products[i].ProductID
+		}
+	}
+
+	return insights, nil
+}
+
 // enhanceMessagesWithKnowledgeAndSystemPrompt adds cannabis knowledge context to the conversation with custom system prompt
 func (oc *OpenAIClient) enhanceMessagesWithKnowledgeAndSystemPrompt(messages []ChatMessage, knowledgeContext *KnowledgeResponse, systemPrompt string) []ChatMessage {
 	log.Printf("=== Enhancing Messages with Cannabis Knowledge ===")
