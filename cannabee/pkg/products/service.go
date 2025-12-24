@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // ProductRecommendationService handles product recommendations using vector search
@@ -975,14 +976,11 @@ func (prs *ProductRecommendationService) enrichProductsWithAIInsights(ctx contex
 		} else {
 			log.Printf("Generated AI insights for %d products", len(aiInsights))
 
-			// Save generated insights to database
-			for _, insight := range aiInsights {
-				if err := prs.saveProductInsight(ctx, queries, insight); err != nil {
-					log.Printf("WARNING: Failed to save AI insight for product %d: %v", insight.ProductID, err)
-				}
-			}
+			// Save generated insights to database ASYNCHRONOUSLY (fire-and-forget)
+			// This doesn't block the response to the user
+			go prs.saveProductInsightsAsync(aiInsights)
 
-			// Add to cached map for enrichment
+			// Add to cached map for enrichment (this happens immediately)
 			for _, insight := range aiInsights {
 				// Convert to database format for consistency
 				topFeelingsJSON, _ := json.Marshal(insight.TopFeelings)
@@ -1013,6 +1011,37 @@ func (prs *ProductRecommendationService) enrichProductsWithAIInsights(ctx contex
 
 	log.Printf("Enriched %d products with AI insights", len(products))
 	return products
+}
+
+// saveProductInsightsAsync saves product insights to database asynchronously
+// This runs in a goroutine to not block the response to the user
+func (prs *ProductRecommendationService) saveProductInsightsAsync(insights []chat.ProductInsightsOutput) {
+	if len(insights) == 0 {
+		return
+	}
+
+	log.Printf("=== Async: Saving %d AI insights to database ===", len(insights))
+	startTime := time.Now()
+
+	// Create a new context for async operation (not tied to request context)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	queries := db.New(prs.db)
+	savedCount := 0
+	errorCount := 0
+
+	for _, insight := range insights {
+		if err := prs.saveProductInsight(ctx, queries, insight); err != nil {
+			log.Printf("WARNING: Async save failed for product %d: %v", insight.ProductID, err)
+			errorCount++
+		} else {
+			savedCount++
+		}
+	}
+
+	log.Printf("=== Async: Completed saving AI insights in %v (saved: %d, errors: %d) ===",
+		time.Since(startTime), savedCount, errorCount)
 }
 
 // saveProductInsight saves a product insight to the database
