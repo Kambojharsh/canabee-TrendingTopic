@@ -1,0 +1,160 @@
+{
+  "meta": {
+    "schema_version": "1.0",
+    "created_at": "ISO-8601",
+    "updated_at": "ISO-8601",
+    "source": {
+      "type": "pubmed | duck-dcuk-go | ope-ai | user_generated | brand",
+      "reference": "string"
+    },
+    "language": "en"
+  },
+
+  "identifiers": {
+    "product_id": "string",
+    "listing_id": "string",
+    "sku": "string",
+  },
+
+  "classification": {
+    "category": "flower | edible | vape | concentrate | tincture | topical | beverage | capsule | pre_roll | extract | balm | cream | oil | suppository | patch",
+    "sub_category": "gummy | chocolate | cookie | cartridge | disposable | shatter | wax | rosin | resin | distillate",
+    "strain_type": "indica | sativa | hybrid | cbd | cbg | balanced | unknown",
+    "strain_name": "string",
+    "cultivar": "string",
+    "genetics": {
+      "parent_strains": ["string"],
+      "dominance": "indica | sativa | hybrid"
+    }
+  },
+
+  "cannabinoid_profile": {
+    "thc": {
+      "total_percent": 0,
+      "delta_9": 0,
+      "thca": 0
+    },
+    "cbd": {
+      "total_percent": 0,
+      "cbda": 0
+    },
+    "minor_cannabinoids": {
+      "cbg": 0,
+      "cbga": 0,
+      "cbc": 0,
+      "cbn": 0,
+      "thcv": 0,
+      "delta_8": 0,
+      "delta_10": 0
+    },
+    "ratio": "THC:CBD",
+    "lab_tested": true
+  },
+
+  "terpene_profile": {
+    "dominant_terpenes": [
+      {
+        "name": "myrcene | limonene | pinene | linalool | caryophyllene | humulene | terpinolene",
+        "percent": 0
+      }
+    ],
+    "secondary_terpenes": ["string"],
+    "total_terpenes_percent": 0
+  },
+
+  "flavor_and_aroma": {
+    "primary_flavors": [
+      "tropical",
+      "mango",
+      "pineapple",
+      "berry",
+      "citrus",
+      "lemon",
+      "orange",
+      "grape",
+      "earthy",
+      "diesel",
+      "skunky",
+      "sweet",
+      "vanilla",
+      "chocolate",
+      "mint",
+      "herbal",
+      "spicy",
+      "peppery",
+      "pine",
+      "woody",
+      "floral"
+    ],
+    "secondary_flavors": ["string"],
+    "artificial_flavors": true,
+    "natural_flavors": true,
+    "aroma_description": "string"
+  },
+
+  "consumption": {
+    "method": ["smoke", "vape", "eat", "drink", "sublingual", "topical", "inhale", "oral"],
+    "onset_time_minutes": { "min": 0, "max": 0 },
+    "duration_hours": { "min": 0, "max": 0 },
+    "bioavailability_notes": "string"
+  },
+
+  "dosage": {
+    "serving_size": "string",
+    "thc_per_serving_mg": 0,
+    "cbd_per_serving_mg": 0,
+    "recommended_beginner_dose": "string",
+    "recommended_experienced_dose": "string",
+    "max_daily_dose": "string"
+  },
+
+  "effects": {
+    "primary_effects": ["relaxed", "euphoric", "happy", "uplifted", "creative", "focused", "energetic", "sleepy", "calm", "body_high", "head_high"],
+    "secondary_effects": ["string"],
+    "medical_benefits": ["pain_relief", "anxiety", "stress", "insomnia", "depression", "inflammation", "nausea", "appetite"],
+    "potential_side_effects": ["dry_mouth", "dry_eyes", "dizziness", "paranoia", "anxiety"],
+    "intensity_level": "low | medium | high"
+  },
+
+  "experience_level": {
+    "suitable_for": ["beginner", "intermediate", "experienced"],
+    "tolerance_notes": "string"
+  },
+
+  "product_details": {
+    "form_factor": "gummy | chocolate | vape_cart | flower_bud | oil_dropper | balm_jar",
+    "net_weight": "string",
+    "unit_count": 0,
+    "packaging_type": "jar | blister | bottle | pouch",
+    "shelf_life": "string",
+    "storage_instructions": "string"
+  },
+
+  "compliance": {
+    "legal_status": "medical | recreational | hemp | restricted",
+    "thc_limit_percent": 0,
+    "region": "string",
+    "age_restriction": 21,
+    "warnings": ["Keep out of reach of children", "Do not drive or operate machinery"]
+  },
+
+  "pricing_and_availability": {
+    "currency": "USD",
+    "price": 0,
+    "availability": "in_stock | out_of_stock | limited",
+    "dispensary": "string",
+    "region": "string"
+  },
+
+  "media": {
+    "images": ["url"],
+    "videos": ["url"],
+    "lab_reports": ["url"]
+  },
+
+  "search_and_ai": {
+    "keywords": ["string"],
+    "semantic_tags": ["tropical_flavor", "high_thc", "relaxation", "evening_use", "beginner_friendly"],
+    "embedding_text": "Full natural‑language description used for vector embeddings"
+  }
+}
