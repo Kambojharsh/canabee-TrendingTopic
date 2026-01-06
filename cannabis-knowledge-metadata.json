@@ -13,7 +13,7 @@
   "identifiers": {
     "product_id": "string",
     "listing_id": "string",
-    "sku": "string",
+    "sku": "string"
   },
 
   "classification": {

@@ -165,3 +165,76 @@ func GetBatchRanges(totalProducts int) [][]int {
 
 	return ranges
 }
+
+// =============================================================================
+// OPENSEARCH CONFIGURATION (AWS OpenSearch Serverless)
+// =============================================================================
+
+// OpenSearch Configuration Constants
+const (
+	// OpenSearchDefaultIndex is the default index name for cannabis educational knowledge
+	OpenSearchDefaultIndex = "cannabis-educational-knowledge"
+
+	// OpenSearchDefaultRegion is the default AWS region
+	OpenSearchDefaultRegion = "us-east-1"
+
+	// OpenSearchSearchSize is the number of documents to fetch from OpenSearch vector search
+	OpenSearchSearchSize = 10
+
+	// OpenSearchScoreThreshold is the minimum similarity score to consider a result relevant
+	// Results below this threshold trigger the fallback search
+	OpenSearchScoreThreshold = 0.75
+
+	// OpenSearchTimeout is the timeout for OpenSearch requests
+	OpenSearchTimeout = 30 * time.Second
+)
+
+// Knowledge Retrieval Configuration
+const (
+	// KnowledgeFallbackEnabled controls whether fallback to external search is enabled
+	KnowledgeFallbackEnabled = true
+
+	// KnowledgeMaxExternalResults is the max number of external search results to process
+	KnowledgeMaxExternalResults = 5
+
+	// KnowledgeCacheTTL is the default TTL for cached knowledge (0 = no TTL)
+	KnowledgeCacheTTL = 0 * time.Hour
+)
+
+// Source Type Constants for knowledge documents
+const (
+	SourceTypeDuckDuckGo    = "duckduckgo"
+	SourceTypePubMed        = "pubmed"
+	SourceTypeUserGenerated = "user_generated"
+	SourceTypeBrand         = "brand"
+)
+
+// Content Type Constants for knowledge documents
+const (
+	ContentTypeEducational = "educational"
+	ContentTypeResearch    = "research"
+	ContentTypeProductInfo = "product_info"
+)
+
+// OpenSearch Environment Variable Names
+const (
+	EnvOpenSearchEndpoint = "OPENSEARCH_ENDPOINT"
+	EnvOpenSearchIndex    = "OPENSEARCH_INDEX"
+	EnvOpenSearchRegion   = "OPENSEARCH_REGION"
+	EnvOpenSearchEnabled  = "OPENSEARCH_ENABLED"
+)
+
+// GetOpenSearchSearchSize returns the OpenSearch search size
+func GetOpenSearchSearchSize() int {
+	return OpenSearchSearchSize
+}
+
+// GetOpenSearchScoreThreshold returns the minimum relevance score threshold
+func GetOpenSearchScoreThreshold() float64 {
+	return OpenSearchScoreThreshold
+}
+
+// IsKnowledgeFallbackEnabled returns whether fallback search is enabled
+func IsKnowledgeFallbackEnabled() bool {
+	return KnowledgeFallbackEnabled
+}
